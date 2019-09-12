@@ -57,6 +57,7 @@ app.post('/extract', function (request, response) {
         entry.confidence = Math.min(year.conf, income.conf);
         result.push(entry);
     }
+    console.log('extract end' + new Date());
     response.send(result);
 });
 app.post('/vision', function (request, response) {
@@ -128,6 +129,7 @@ app.post('/vision', function (request, response) {
         }
     }
     console.log('vision: ' + JSON.stringify(aggregated));
+    console.log('vision end' + new Date());
     response.send(aggregated);
 });
 function processLine(words) {
