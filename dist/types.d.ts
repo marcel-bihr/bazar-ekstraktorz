@@ -20,3 +20,16 @@ export declare type TextContent = {
     conf: number;
     content: string;
 };
+export declare type Root = {
+    regions: Region[];
+};
+export declare type Region = {
+    lines: Line[];
+};
+export declare type Line = {
+    words: Word[];
+};
+export declare type Word = {
+    text: string;
+    boundingBox: string;
+};

@@ -1,5 +1,6 @@
 import express from 'express';
-import {YearEntry, Document, Page, Element, Content, TextContent} from './types';
+import {YearEntry, Document, Page, Element, Content, TextContent, Root, Line, Word} from './types';
+import { privateEncrypt } from 'crypto';
 
 
 
@@ -12,7 +13,7 @@ var regexIso8601 = /^(\d{4}|\+\d{6})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2}):(\
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({limit: '50mb'}));
 app.use(loggerMiddleware);
 
 
@@ -64,9 +65,143 @@ app.post('/extract', (request, response) => {
         result.push(entry);
     }
     
-    // extract year income from rawData
     response.send(result);
 });
+
+app.post('/vision', (request, response) => {
+    const rawData: Root = request.body;
+
+    let words: Word[]= [];
+
+    for (let r of rawData.regions) {
+        for (let l of r.lines) {
+            for (let w of l.words) {
+              words.push(w);
+            }
+        }
+    }
+    const firstEntry= findDatori(words) + 10; 
+
+    console.log('datori sono ab y ' + firstEntry);
+    let table= words.filter((word: Word) => getY(word) >= firstEntry);
+
+    const compareByCoordinate= (a: Word, b: Word) => {
+        if (Math.abs(getY(a) - getY(b)) < 5) {
+            return getX(a)- getX(b);
+        }
+        return getY(a) - getY(b);
+    }  
+    table.sort(compareByCoordinate);
+
+    console.log('sorted table ' + JSON.stringify(table));
+    
+    let result: YearEntry[]= [];
+
+    let entry: Word[]= [];
+    let x= 0;
+    for (let w of table) {
+        if(getX(w) < x) {
+            // zeile ist fertig, wir verarbeiten jetzt die vorhandene
+            if (entry.length>3) {
+                let res= processLine(entry);
+                if (!res) {
+                    break;
+                }
+                result.push(res);
+            }
+            entry= [];
+            x= 0;
+        } else {
+            entry.push(w);
+            x= getX(w);
+        }
+    }
+    let res= processLine(entry);
+    if (res) {
+        result.push(res);
+    }
+    let aggregated: YearEntry[]= [];
+    let prev: YearEntry;
+    for (let r of result) {
+        if (prev) {
+            if (prev.year == r.year) {
+                prev.income += r.income;
+            } else {
+                aggregated.push(r);
+                prev= r;
+            }
+        } else {
+            aggregated.push(r);
+            prev= r;
+        }
+    }
+    console.log('vision: ' + JSON.stringify(aggregated));
+    response.send(aggregated);
+});
+
+function processLine(words: Word[]): YearEntry {
+    let terms: string[]= [];
+
+    let term: string= words[0].text;
+    let prev = words[0];
+    for (let i= 1; i< words.length; i++) {
+        if ((getX(words[i]) - (getX(prev)+getWidth(prev)) > 20)) {
+            terms.push(term);
+            term= words[i].text;
+            prev= words[i];
+        } else {
+            term= term + words[i].text;
+            prev= words[i];
+        }
+    }
+    terms.push(term);
+
+    console.log('line: ' + JSON.stringify(terms));
+    let entry= new YearEntry;
+    entry.year= parseInt(terms[terms.length-3]);
+    if (isNaN(entry.year)) {
+        console.log('not a number: ' + terms[terms.length-3]);
+        return;
+    }
+    let currentYear= new Date().getFullYear().toString().substring(2, 4);
+    if (entry.year > parseInt(currentYear)) {
+        entry.year= entry.year + 1900;
+    } else {
+        entry.year = entry.year + 2000;
+    }
+    const income= terms[terms.length-2];
+    entry.income= parseInt(income.replace('\'', ''));
+    if (isNaN(entry.income)) {
+        console.log('not a number: ' + terms[terms.length-2]);
+        return;
+    }
+    entry.confidence= -1;
+    return entry;
+}
+
+function findDatori(word: Word[]): number {
+    for (let w of word) {
+        if (w.text.startsWith('Datori')) {
+            return getY(w);
+        }
+    }
+}
+
+function getX(word: Word): number {
+    const x= parseInt(word.boundingBox.split(',')[0]);
+    return x;
+}
+
+function getY(word: Word): number {
+    const y= parseInt(word.boundingBox.split(',')[1]);
+    return y;
+}
+
+function getWidth(word: Word): number {
+    const width= parseInt(word.boundingBox.split(',')[2]);
+    return width;
+}
+
 
 app.listen(4000);
 

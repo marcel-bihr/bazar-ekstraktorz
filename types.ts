@@ -25,3 +25,20 @@ export type TextContent = {
     conf: number;
     content: string;
 }
+
+export type Root = {
+    regions: Region[];
+}
+
+export type Region = {
+    lines: Line[];
+}
+
+export type Line = {
+    words: Word[];
+}
+
+export type Word = {
+    text: string;
+    boundingBox: string;
+}
