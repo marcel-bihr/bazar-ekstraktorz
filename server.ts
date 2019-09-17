@@ -80,13 +80,18 @@ app.post('/vision', (request, response) => {
             }
         }
     }
-    const firstEntry= findDatori(words) + 10; 
-
-    console.log('datori sono ab y ' + firstEntry);
-    let table= words.filter((word: Word) => getY(word) >= firstEntry);
+    const firstEntry= findDatori(words);
+    if (!firstEntry) {
+        console.log('no reference entry found (datori)');
+        return
+    }
+    console.log('datori sono ab y ' + JSON.stringify(firstEntry));
+    const tolerance= getHeight(firstEntry);
+    const verticalOffset= getY(firstEntry) + tolerance;
+    let table= words.filter((word: Word) => getY(word) >= verticalOffset);
 
     const compareByCoordinate= (a: Word, b: Word) => {
-        if (Math.abs(getY(a) - getY(b)) < 5) {
+        if (Math.abs(getY(a) - getY(b)) < tolerance/2) {
             return getX(a)- getX(b);
         }
         return getY(a) - getY(b);
@@ -103,7 +108,7 @@ app.post('/vision', (request, response) => {
         if(getX(w) < x) {
             // zeile ist fertig, wir verarbeiten jetzt die vorhandene
             if (entry.length>3) {
-                let res= processLine(entry);
+                let res= processLine(entry, tolerance);
                 if (!res) {
                     break;
                 }
@@ -116,7 +121,7 @@ app.post('/vision', (request, response) => {
             x= getX(w);
         }
     }
-    let res= processLine(entry);
+    let res= processLine(entry, tolerance);
     if (res) {
         result.push(res);
     }
@@ -140,13 +145,16 @@ app.post('/vision', (request, response) => {
     response.send(aggregated);
 });
 
-function processLine(words: Word[]): YearEntry {
+function processLine(words: Word[], tolerance: number): YearEntry {
     let terms: string[]= [];
+    if (!words[0]) {
+        return
+    } 
 
     let term: string= words[0].text;
     let prev = words[0];
     for (let i= 1; i< words.length; i++) {
-        if ((getX(words[i]) - (getX(prev)+getWidth(prev)) > 20)) {
+        if ((getX(words[i]) - (getX(prev)+getWidth(prev)) > tolerance)) {
             terms.push(term);
             term= words[i].text;
             prev= words[i];
@@ -180,10 +188,10 @@ function processLine(words: Word[]): YearEntry {
     return entry;
 }
 
-function findDatori(word: Word[]): number {
+function findDatori(word: Word[]): Word {
     for (let w of word) {
-        if (w.text.startsWith('Datori')) {
-            return getY(w);
+        if (w.text.startsWith('Datori') || w.text.startsWith('reddito')) {
+            return w;
         }
     }
 }
@@ -201,6 +209,11 @@ function getY(word: Word): number {
 function getWidth(word: Word): number {
     const width= parseInt(word.boundingBox.split(',')[2]);
     return width;
+}
+
+function getHeight(word: Word): number {
+    const height= parseInt(word.boundingBox.split(',')[3]);
+    return height;
 }
 
 

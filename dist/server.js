@@ -73,11 +73,17 @@ app.post('/vision', function (request, response) {
             }
         }
     }
-    var firstEntry = findDatori(words) + 10;
-    console.log('datori sono ab y ' + firstEntry);
-    var table = words.filter(function (word) { return getY(word) >= firstEntry; });
+    var firstEntry = findDatori(words);
+    if (!firstEntry) {
+        console.log('no reference entry found (datori)');
+        return;
+    }
+    console.log('datori sono ab y ' + JSON.stringify(firstEntry));
+    var tolerance = getHeight(firstEntry);
+    var verticalOffset = getY(firstEntry) + tolerance;
+    var table = words.filter(function (word) { return getY(word) >= verticalOffset; });
     var compareByCoordinate = function (a, b) {
-        if (Math.abs(getY(a) - getY(b)) < 5) {
+        if (Math.abs(getY(a) - getY(b)) < tolerance / 2) {
             return getX(a) - getX(b);
         }
         return getY(a) - getY(b);
@@ -92,7 +98,7 @@ app.post('/vision', function (request, response) {
         if (getX(w) < x) {
             // zeile ist fertig, wir verarbeiten jetzt die vorhandene
             if (entry.length > 3) {
-                var res_1 = processLine(entry);
+                var res_1 = processLine(entry, tolerance);
                 if (!res_1) {
                     break;
                 }
@@ -106,7 +112,7 @@ app.post('/vision', function (request, response) {
             x = getX(w);
         }
     }
-    var res = processLine(entry);
+    var res = processLine(entry, tolerance);
     if (res) {
         result.push(res);
     }
@@ -132,12 +138,15 @@ app.post('/vision', function (request, response) {
     console.log('vision end' + new Date());
     response.send(aggregated);
 });
-function processLine(words) {
+function processLine(words, tolerance) {
     var terms = [];
+    if (!words[0]) {
+        return;
+    }
     var term = words[0].text;
     var prev = words[0];
     for (var i = 1; i < words.length; i++) {
-        if ((getX(words[i]) - (getX(prev) + getWidth(prev)) > 20)) {
+        if ((getX(words[i]) - (getX(prev) + getWidth(prev)) > tolerance)) {
             terms.push(term);
             term = words[i].text;
             prev = words[i];
@@ -174,8 +183,8 @@ function processLine(words) {
 function findDatori(word) {
     for (var _i = 0, word_1 = word; _i < word_1.length; _i++) {
         var w = word_1[_i];
-        if (w.text.startsWith('Datori')) {
-            return getY(w);
+        if (w.text.startsWith('Datori') || w.text.startsWith('reddito')) {
+            return w;
         }
     }
 }
@@ -190,6 +199,10 @@ function getY(word) {
 function getWidth(word) {
     var width = parseInt(word.boundingBox.split(',')[2]);
     return width;
+}
+function getHeight(word) {
+    var height = parseInt(word.boundingBox.split(',')[3]);
+    return height;
 }
 app.listen(4000);
 function findFirstLine(words) {
